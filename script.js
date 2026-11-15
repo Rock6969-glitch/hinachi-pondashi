@@ -3,13 +3,13 @@ let masterGain = null;
 let analyser = null;
 let activeSources = [];
 
-// 4×4（16マス）固定配列
 const TOTAL_SLOTS = 16;
-let slots = new Array(TOTAL_SLOTS).fill(null);
+let tabs = [];
+let activeTabIndex = 0;
 let editingSlotIndex = null;
 let draggedSlotIndex = null;
+let draggedTabIndex = null;
 
-// 4×4のPCキーボード配列に完全対応したショートカットキー
 const KEY_MAP = [
   "1", "2", "3", "4",
   "Q", "W", "E", "R",
@@ -17,37 +17,40 @@ const KEY_MAP = [
   "Z", "X", "C", "V"
 ];
 
-// IndexedDB（音源データと16マス配置をPC再起動後も保持）
-const DB_NAME = "HinachiPonDB_v2";
-const STORE_NAME = "slotsStore";
+// IndexedDB（全タブ・全16マスの音声データと配置を永続保存）
+const DB_NAME = "HinachiPonDB_v3";
+const STORE_NAME = "appStateStore";
 
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = (e) => {
-      e.target.result.createObjectStore(STORE_NAME, { keyPath: "slotIndex" });
+      e.target.result.createObjectStore(STORE_NAME, { keyPath: "key" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
 
-// 16マス全体の自動保存
+// 全タブの状態を自動保存
 async function saveState() {
   const statusEl = document.getElementById("save-status");
   statusEl.textContent = "⏳ 保存中...";
 
+  const cleanTabs = tabs.map((tab) => ({
+    id: tab.id,
+    name: tab.name,
+    slots: tab.slots.map((item) => {
+      if (!item) return null;
+      const { audioBuffer, ...storable } = item;
+      return storable;
+    })
+  }));
+
   const db = await openDB();
   const tx = db.transaction(STORE_NAME, "readwrite");
   const store = tx.objectStore(STORE_NAME);
-  store.clear();
-
-  slots.forEach((item, idx) => {
-    if (item) {
-      const { audioBuffer, ...storable } = item;
-      store.put({ slotIndex: idx, data: storable });
-    }
-  });
+  store.put({ key: "tabsData", tabs: cleanTabs, activeTabIndex });
 
   localStorage.setItem(
     "hinachi_settings",
@@ -79,17 +82,16 @@ async function loadState() {
   return new Promise((resolve) => {
     const tx = db.transaction(STORE_NAME, "readonly");
     const store = tx.objectStore(STORE_NAME);
-    const req = store.getAll();
+    const req = store.get("tabsData");
     req.onsuccess = () => {
-      const records = req.result || [];
-      const restored = new Array(TOTAL_SLOTS).fill(null);
-      records.forEach((rec) => {
-        if (rec.slotIndex >= 0 && rec.slotIndex < TOTAL_SLOTS) {
-          restored[rec.slotIndex] = rec.data;
-        }
-      });
-      slots = restored;
-      resolve(records.length > 0);
+      const record = req.result;
+      if (record && Array.isArray(record.tabs) && record.tabs.length > 0) {
+        tabs = record.tabs;
+        activeTabIndex = Math.min(record.activeTabIndex ?? 0, tabs.length - 1);
+        resolve(true);
+      } else {
+        resolve(false);
+      }
     };
   });
 }
@@ -99,15 +101,121 @@ async function fetchOfficialConfig() {
   return await res.json();
 }
 
+function createEmptySlots() {
+  return new Array(TOTAL_SLOTS).fill(null);
+}
+
 async function initApp() {
+  let official = null;
   try {
-    const official = await fetchOfficialConfig();
+    official = await fetchOfficialConfig();
     document.getElementById("app-version").textContent = "v" + official.version;
     document.getElementById("app-title").textContent = official.title;
   } catch (_) {}
 
-  await loadState();
+  const hasSaved = await loadState();
+  if (!hasSaved) {
+    if (official && Array.isArray(official.tabs)) {
+      tabs = official.tabs.map((t) => ({
+        id: t.id,
+        name: t.name,
+        slots: Array.from({ length: TOTAL_SLOTS }, (_, i) => t.slots?.[i] ?? null)
+      }));
+    } else {
+      tabs = [
+        { id: "tab1", name: "🎀 メイン", slots: createEmptySlots() },
+        { id: "tab2", name: "✨ リアクション", slots: createEmptySlots() },
+        { id: "tab3", name: "🎵 ボイス", slots: createEmptySlots() },
+        { id: "tab4", name: "🎉 その他", slots: createEmptySlots() }
+      ];
+    }
+    await saveState();
+  }
+  renderAll();
+}
+
+function renderAll() {
+  renderTabs();
   renderGrid();
+}
+
+// タブバー描画（常時追加・削除・名前変更・並べ替え可能）
+function renderTabs() {
+  const bar = document.getElementById("tab-bar");
+  bar.innerHTML = "";
+
+  tabs.forEach((tab, idx) => {
+    const el = document.createElement("div");
+    el.className = "tab-item" + (idx === activeTabIndex ? " active" : "");
+    el.draggable = true;
+    el.title = "クリックで切替 / ダブルクリックで名前変更 / ドラッグで順番移動";
+
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = tab.name;
+    el.appendChild(labelSpan);
+
+    // タブが2つ以上ある場合はいつでも削除可能
+    if (tabs.length > 1) {
+      const delBtn = document.createElement("button");
+      delBtn.className = "tab-del-btn";
+      delBtn.textContent = "✕";
+      delBtn.title = "このタブを削除";
+      delBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm(`タブ「${tab.name}」を削除しますか？（中の音源データも消去されます）`)) return;
+        tabs.splice(idx, 1);
+        if (activeTabIndex >= tabs.length) activeTabIndex = tabs.length - 1;
+        await saveState();
+        renderAll();
+      });
+      el.appendChild(delBtn);
+    }
+
+    // タブ切り替え
+    el.addEventListener("click", async () => {
+      activeTabIndex = idx;
+      await saveState();
+      renderAll();
+    });
+
+    // ダブルクリックでいつでもタブ名変更
+    el.addEventListener("dblclick", async () => {
+      const newName = prompt("新しいタブ名を入力してください", tab.name);
+      if (newName && newName.trim()) {
+        tab.name = newName.trim();
+        await saveState();
+        renderTabs();
+      }
+    });
+
+    // タブのドラッグ＆ドロップ並べ替え
+    el.addEventListener("dragstart", (e) => {
+      draggedTabIndex = idx;
+      e.dataTransfer.effectAllowed = "move";
+    });
+    el.addEventListener("dragover", (e) => {
+      if (draggedTabIndex !== null) {
+        e.preventDefault();
+        el.classList.add("drag-over-tab");
+      }
+    });
+    el.addEventListener("dragleave", () => {
+      el.classList.remove("drag-over-tab");
+    });
+    el.addEventListener("drop", async (e) => {
+      el.classList.remove("drag-over-tab");
+      if (draggedTabIndex === null || draggedTabIndex === idx) return;
+      e.preventDefault();
+      const moved = tabs.splice(draggedTabIndex, 1)[0];
+      tabs.splice(idx, 0, moved);
+      activeTabIndex = idx;
+      draggedTabIndex = null;
+      await saveState();
+      renderAll();
+    });
+
+    bar.appendChild(el);
+  });
 }
 
 // AudioContext 初期化
@@ -156,7 +264,8 @@ function hexToRgba(hex, alpha) {
 
 // スロット再生
 async function triggerSlot(index) {
-  const pad = slots[index];
+  const currentSlots = tabs[activeTabIndex].slots;
+  const pad = currentSlots[index];
   if (!pad) return;
 
   initAudio();
@@ -176,12 +285,12 @@ async function triggerSlot(index) {
   padGain.gain.setValueAtTime(1.0, audioCtx.currentTime);
   padGain.connect(masterGain);
 
-  const entry = { slotIndex: index, gainNode: padGain, sourceNode: null };
+  const entry = { slotIndex: index, tabIndex: activeTabIndex, gainNode: padGain, sourceNode: null };
   activeSources.push(entry);
 
   const cleanup = () => {
     activeSources = activeSources.filter((s) => s !== entry);
-    if (!activeSources.some((s) => s.slotIndex === index) && padEl) {
+    if (!activeSources.some((s) => s.slotIndex === index && s.tabIndex === activeTabIndex) && padEl) {
       padEl.classList.remove("playing");
       padEl.style.backgroundColor = hexToRgba(color, 0.08);
       padEl.style.boxShadow = "none";
@@ -244,10 +353,11 @@ function fadeOutAllSounds() {
 function renderGrid() {
   const grid = document.getElementById("pad-grid");
   const isEdit = document.getElementById("edit-mode-toggle").checked;
+  const currentSlots = tabs[activeTabIndex].slots;
   grid.innerHTML = "";
 
   for (let i = 0; i < TOTAL_SLOTS; i++) {
-    const pad = slots[i];
+    const pad = currentSlots[i];
     const cell = document.createElement("div");
     cell.dataset.slotIndex = i;
 
@@ -280,7 +390,7 @@ function renderGrid() {
 
       cell.addEventListener("click", async (e) => {
         if (e.target.classList.contains("pad-delete")) {
-          slots[i] = null;
+          currentSlots[i] = null;
           await saveState();
           renderGrid();
           return;
@@ -293,7 +403,6 @@ function renderGrid() {
       });
     }
 
-    // ドラッグ＆ドロップ（ボタン位置入れ替え ＆ 音声ファイルの直接ドロップ）
     cell.draggable = isEdit && pad !== null;
 
     cell.addEventListener("dragstart", (e) => {
@@ -321,9 +430,9 @@ function renderGrid() {
       }
 
       if (draggedSlotIndex !== null && draggedSlotIndex !== i) {
-        const temp = slots[i];
-        slots[i] = slots[draggedSlotIndex];
-        slots[draggedSlotIndex] = temp;
+        const temp = currentSlots[i];
+        currentSlots[i] = currentSlots[draggedSlotIndex];
+        currentSlots[draggedSlotIndex] = temp;
         draggedSlotIndex = null;
         await saveState();
         renderGrid();
@@ -347,17 +456,18 @@ function pickFileForSlot(targetIndex) {
 }
 
 async function assignFilesFromIndex(files, startIndex) {
+  const currentSlots = tabs[activeTabIndex].slots;
   let cursor = startIndex;
   for (const file of files) {
     if (!file.type.startsWith("audio/")) continue;
-    while (cursor < TOTAL_SLOTS && slots[cursor] !== null && cursor !== startIndex) {
+    while (cursor < TOTAL_SLOTS && currentSlots[cursor] !== null && cursor !== startIndex) {
       cursor++;
     }
     if (cursor >= TOTAL_SLOTS) break;
 
     const arrayBuffer = await file.arrayBuffer();
     const cleanName = file.name.replace(/\.[^/.]+$/, "");
-    slots[cursor] = {
+    currentSlots[cursor] = {
       id: "local_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
       label: cleanName,
       icon: "🎧",
@@ -372,7 +482,7 @@ async function assignFilesFromIndex(files, startIndex) {
 }
 
 function openEditModal(index) {
-  const pad = slots[index];
+  const pad = tabs[activeTabIndex].slots[index];
   if (!pad) return;
   editingSlotIndex = index;
   document.getElementById("edit-label").value = pad.label;
@@ -401,30 +511,49 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("edit-mode-toggle").addEventListener("change", (e) => {
     document.getElementById("edit-hint").classList.toggle("hidden", !e.target.checked);
-    renderGrid();
+    renderAll();
+  });
+
+  // 新規タブ追加
+  document.getElementById("add-tab-btn").addEventListener("click", async () => {
+    const name = prompt("新しいタブ名を入力してください", `タブ ${tabs.length + 1}`);
+    if (!name || !name.trim()) return;
+    tabs.push({
+      id: "tab_" + Date.now(),
+      name: name.trim(),
+      slots: createEmptySlots()
+    });
+    activeTabIndex = tabs.length - 1;
+    await saveState();
+    renderAll();
   });
 
   document.getElementById("stop-all-btn").addEventListener("click", stopAllSounds);
   document.getElementById("fade-all-btn").addEventListener("click", fadeOutAllSounds);
 
-  // 全スロットを空にする
-  document.getElementById("clear-all-btn").addEventListener("click", async () => {
-    if (!confirm("16マスすべての音源と設定を消去して空にしますか？")) return;
+  // 現在のタブを空にする
+  document.getElementById("clear-tab-btn").addEventListener("click", async () => {
+    const currentTab = tabs[activeTabIndex];
+    if (!confirm(`タブ「${currentTab.name}」の16マスをすべて空にしますか？`)) return;
     stopAllSounds();
-    slots = new Array(TOTAL_SLOTS).fill(null);
+    currentTab.slots = createEmptySlots();
     await saveState();
     renderGrid();
   });
 
   // 設定JSON書き出し
   document.getElementById("export-json-btn").addEventListener("click", () => {
-    const cleanSlots = slots.map((item) => {
-      if (!item) return null;
-      const { audioBuffer, arrayBuffer, ...rest } = item;
-      return rest;
-    });
+    const cleanTabs = tabs.map((tab) => ({
+      id: tab.id,
+      name: tab.name,
+      slots: tab.slots.map((item) => {
+        if (!item) return null;
+        const { audioBuffer, arrayBuffer, ...rest } = item;
+        return rest;
+      })
+    }));
     const jsonStr = JSON.stringify(
-      { version: "2.1.0", title: "🎀 ひなち専用ポン出しサンプラー", slots: cleanSlots },
+      { version: "3.1.0", title: "🎀 ひなち専用ポン出しサンプラー", tabs: cleanTabs },
       null,
       2
     );
@@ -445,7 +574,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("edit-modal").classList.add("hidden");
   });
   document.getElementById("modal-save").addEventListener("click", async () => {
-    const target = slots[editingSlotIndex];
+    const target = tabs[activeTabIndex].slots[editingSlotIndex];
     if (target) {
       target.label = document.getElementById("edit-label").value || target.label;
       target.icon = document.getElementById("edit-icon").value || target.icon;
@@ -460,7 +589,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const fileInput = document.getElementById("file-input");
   dropZone.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", async (e) => {
-    const firstEmpty = slots.findIndex((s) => s === null);
+    const currentSlots = tabs[activeTabIndex].slots;
+    const firstEmpty = currentSlots.findIndex((s) => s === null);
     if (firstEmpty !== -1) await assignFilesFromIndex(e.target.files, firstEmpty);
   });
   dropZone.addEventListener("dragover", (e) => {
@@ -471,7 +601,8 @@ document.addEventListener("DOMContentLoaded", () => {
   dropZone.addEventListener("drop", async (e) => {
     e.preventDefault();
     dropZone.classList.remove("dragover");
-    const firstEmpty = slots.findIndex((s) => s === null);
+    const currentSlots = tabs[activeTabIndex].slots;
+    const firstEmpty = currentSlots.findIndex((s) => s === null);
     if (firstEmpty !== -1) await assignFilesFromIndex(e.dataTransfer.files, firstEmpty);
   });
 
@@ -488,7 +619,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const idx = KEY_MAP.indexOf(e.key.toUpperCase());
-    if (idx !== -1 && slots[idx]) {
+    if (idx !== -1 && tabs[activeTabIndex].slots[idx]) {
       triggerSlot(idx);
     }
   });
