@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ひなち専用ポン出しアプリ (4×4)</title>
+  <title>ひなち専用ポン出しサンプラー (タブ対応)</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -12,11 +12,11 @@
     <header class="header">
       <div class="title-area">
         <div class="badge-row">
-          <span class="badge">PC 16-PAD SAMPLER</span>
-          <span id="app-version" class="version-tag">v2.1.0</span>
+          <span class="badge">PC 16-PAD × TABS</span>
+          <span id="app-version" class="version-tag">v3.1.0</span>
           <span id="save-status" class="save-status">💾 自動保存済み</span>
         </div>
-        <h1 id="app-title">🎀 ひなち専用ポン出しアプリ</h1>
+        <h1 id="app-title">🎀 ひなち専用ポン出しサンプラー</h1>
       </div>
 
       <div class="status-area">
@@ -56,8 +56,14 @@
     </section>
 
     <p id="edit-hint" class="edit-hint hidden">
-      💡 <strong>編集モード中：</strong> ボタンをドラッグ＆ドロップで位置移動 ／ クリックで名前・色変更 ／ 右上の「✕」でスロット削除
+      💡 <strong>編集モード中：</strong> ボタンのドラッグ移動・クリックで名前・色変更（タブの追加・削除・名前変更はいつでも常時可能です）
     </p>
+
+    <!-- タブバー -->
+    <nav class="tab-bar-wrapper">
+      <div id="tab-bar" class="tab-bar"></div>
+      <button id="add-tab-btn" class="btn-add-tab" title="新しいタブを追加">＋ タブ追加</button>
+    </nav>
 
     <!-- 4×4 16マスパッドグリッド -->
     <main>
@@ -67,9 +73,9 @@
     <!-- 音源一括追加＆データ管理 -->
     <section class="custom-section">
       <div class="custom-header">
-        <h2>🎵 音源追加・データ管理（PC再起動後も自動保持）</h2>
+        <h2>🎵 音源追加・データ管理（全タブ自動保存）</h2>
         <div class="action-buttons">
-          <button id="clear-all-btn" class="btn btn-secondary">🗑️ 全スロットを空にする</button>
+          <button id="clear-tab-btn" class="btn btn-secondary">🗑️ このタブを空にする</button>
           <button id="export-json-btn" class="btn btn-primary">💾 設定JSON書き出し</button>
         </div>
       </div>

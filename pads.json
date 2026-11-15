@@ -1,10 +1,26 @@
 {
-  "version": "2.1.0",
+  "version": "3.1.0",
   "title": "🎀 ひなち専用ポン出しアプリ",
-  "slots": [
-    null, null, null, null,
-    null, null, null, null,
-    null, null, null, null,
-    null, null, null, null
+  "tabs": [
+    {
+      "id": "tab1",
+      "name": "🎀 メイン",
+      "slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]
+    },
+    {
+      "id": "tab2",
+      "name": "✨ リアクション",
+      "slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]
+    },
+    {
+      "id": "tab3",
+      "name": "🎵 ボイス",
+      "slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]
+    },
+    {
+      "id": "tab4",
+      "name": "🎉 その他",
+      "slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]
+    }
   ]
 }
