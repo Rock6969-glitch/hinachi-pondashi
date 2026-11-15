@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ひなち専用ポン出しサンプラー (4×4)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- ヘッダー -->
+    <header class="header">
+      <div class="title-area">
+        <div class="badge-row">
+          <span class="badge">PC 16-PAD SAMPLER</span>
+          <span id="app-version" class="version-tag">v2.1.0</span>
+          <span id="save-status" class="save-status">💾 自動保存済み</span>
+        </div>
+        <h1 id="app-title">🎀 ひなち専用ポン出しサンプラー</h1>
+      </div>
+
+      <div class="status-area">
+        <div class="meter-wrapper" title="出力レベルメーター">
+          <div id="level-bar" class="level-bar"></div>
+        </div>
+        <button id="stop-all-btn" class="btn btn-danger">■ 全停止 (Esc)</button>
+        <button id="fade-all-btn" class="btn btn-warning">↘ フェード (Space)</button>
+      </div>
+    </header>
+
+    <!-- コントロールバー -->
+    <section class="control-bar">
+      <div class="control-group">
+        <label for="master-volume">🔊 マスター音量: <span id="volume-val">80</span>%</label>
+        <input type="range" id="master-volume" min="0" max="100" value="80" />
+      </div>
+
+      <div class="control-group">
+        <label for="fade-duration">⏱ フェード時間: <span id="fade-val">1.5</span>秒</label>
+        <input type="range" id="fade-duration" min="0.5" max="5.0" step="0.5" value="1.5" />
+      </div>
+
+      <div class="control-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="overlap-toggle" checked />
+          音の重ね鳴らし許可
+        </label>
+      </div>
+
+      <div class="control-group">
+        <label class="checkbox-label edit-toggle">
+          <input type="checkbox" id="edit-mode-toggle" />
+          ✏️ 編集・並べ替えモード
+        </label>
+      </div>
+    </section>
+
+    <p id="edit-hint" class="edit-hint hidden">
+      💡 <strong>編集モード中：</strong> ボタンをドラッグ＆ドロップで位置移動 ／ クリックで名前・色変更 ／ 右上の「✕」でスロット削除
+    </p>
+
+    <!-- 4×4 16マスパッドグリッド -->
+    <main>
+      <div id="pad-grid" class="pad-grid"></div>
+    </main>
+
+    <!-- 音源一括追加＆データ管理 -->
+    <section class="custom-section">
+      <div class="custom-header">
+        <h2>🎵 音源追加・データ管理（PC再起動後も自動保持）</h2>
+        <div class="action-buttons">
+          <button id="clear-all-btn" class="btn btn-secondary">🗑️ 全スロットを空にする</button>
+          <button id="export-json-btn" class="btn btn-primary">💾 設定JSON書き出し</button>
+        </div>
+      </div>
+
+      <div id="drop-zone" class="drop-zone">
+        <p>音声ファイル（MP3 / WAV / OGG）をここにドラッグ＆ドロップ、または上の空きマスをクリックして追加</p>
+        <input type="file" id="file-input" accept="audio/*" multiple hidden />
+      </div>
+    </section>
+  </div>
+
+  <!-- ボタン編集モーダル -->
+  <div id="edit-modal" class="modal hidden">
+    <div class="modal-content">
+      <h3>ボタンのカスタマイズ</h3>
+      <label>ボタン名</label>
+      <input type="text" id="edit-label" placeholder="例：おはよう！" />
+      <label>アイコン（絵文字）</label>
+      <input type="text" id="edit-icon" maxlength="4" placeholder="例：🎀" />
+      <label>ボタンカラー</label>
+      <div class="color-row">
+        <input type="color" id="edit-color" value="#ff5ca8" />
+        <div class="preset-colors">
+          <button type="button" class="color-dot" data-color="#ff5ca8" style="background:#ff5ca8"></button>
+          <button type="button" class="color-dot" data-color="#38bdf8" style="background:#38bdf8"></button>
+          <button type="button" class="color-dot" data-color="#22c55e" style="background:#22c55e"></button>
+          <button type="button" class="color-dot" data-color="#eab308" style="background:#eab308"></button>
+          <button type="button" class="color-dot" data-color="#a855f7" style="background:#a855f7"></button>
+          <button type="button" class="color-dot" data-color="#ef4444" style="background:#ef4444"></button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="btn btn-secondary">キャンセル</button>
+        <button id="modal-save" class="btn btn-primary">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
